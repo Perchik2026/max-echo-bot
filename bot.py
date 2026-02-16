@@ -2,7 +2,7 @@ import os
 import asyncio
 from maxapi import Bot, Dispatcher
 from maxapi.types import MessageCreated, CallbackQuery
-from maxapi.keyboards import InlineKeyboard, InlineKeyboardButton
+from maxapi.types import InlineKeyboardMarkup, InlineKeyboardButton  # ← ИСПРАВЛЕНО!
 
 # Токен из переменной окружения
 TOKEN = os.environ.get("BOT_TOKEN")
@@ -14,7 +14,7 @@ dp = Dispatcher()
 
 def get_main_keyboard():
     """Главное меню с кнопками"""
-    keyboard = InlineKeyboard()
+    keyboard = InlineKeyboardMarkup()  # ← ИСПРАВЛЕНО!
     keyboard.add(
         InlineKeyboardButton(text="📋 ОТЧЕТ О ПП", callback_data="menu_pp"),
         InlineKeyboardButton(text="📚 ВКР", callback_data="menu_vkr")
@@ -27,7 +27,7 @@ def get_main_keyboard():
 
 def get_pp_keyboard():
     """Меню раздела ПП с кнопками"""
-    keyboard = InlineKeyboard()
+    keyboard = InlineKeyboardMarkup()  # ← ИСПРАВЛЕНО!
     keyboard.add(
         InlineKeyboardButton(text="📄 О бланках", callback_data="pp_blanks"),
         InlineKeyboardButton(text="📋 Индивидуальное задание", callback_data="pp_individual")
@@ -52,7 +52,7 @@ def get_pp_keyboard():
 
 def get_requirements_keyboard():
     """Меню общих требований с кнопками"""
-    keyboard = InlineKeyboard()
+    keyboard = InlineKeyboardMarkup()  # ← ИСПРАВЛЕНО!
     keyboard.add(
         InlineKeyboardButton(text="📚 Источники", callback_data="req_bibliography_sources"),
         InlineKeyboardButton(text="📝 Оформление ссылок", callback_data="req_bibliography_links")
@@ -84,7 +84,7 @@ def get_requirements_keyboard():
 
 def get_back_keyboard(target_menu):
     """Кнопка возврата в указанное меню"""
-    keyboard = InlineKeyboard()
+    keyboard = InlineKeyboardMarkup()  # ← ИСПРАВЛЕНО!
     if target_menu == "pp":
         keyboard.add(InlineKeyboardButton(text="🔙 НАЗАД К МЕНЮ ПП", callback_data="menu_pp"))
     elif target_menu == "requirements":
