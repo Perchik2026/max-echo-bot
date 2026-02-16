@@ -682,11 +682,11 @@ async def handle_all_messages(event: MessageCreated):
     
     # ===== ГЛАВНОЕ МЕНЮ =====
     if text == "/start":
-        await event.message.answer(WELCOME_MESSAGE.format(user_name), format="Markdown")
+        await event.message.answer(WELCOME_MESSAGE.format(user_name))
     
     # ===== МЕНЮ ПП =====
     elif text == "/pp":
-        await event.message.answer(PP_MENU, format="HTML")
+        await event.message.answer(PP_MENU)
     
     elif text == "/pp_blanks":
         await event.message.answer(PP_KNOWLEDGE["blanks"], format="HTML")
