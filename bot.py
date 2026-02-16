@@ -1,10 +1,9 @@
 import os
 import asyncio
 from maxapi import Bot, Dispatcher
-from maxapi.types import MessageCreated
+from maxapi.types import MessageCreated, Callback  # ← исправлено!
 from maxapi.types import CallbackButton, ButtonsPayload, Attachment
 from maxapi.enums.intent import Intent
-from maxapi.types import CallbackQuery  # это для обработки нажатий
 
 # Токен из переменной окружения
 TOKEN = os.environ.get("BOT_TOKEN")
@@ -675,22 +674,22 @@ def get_main_menu():
     """Главное меню с кнопками"""
     btn_pp = CallbackButton(
         text="📋 ОТЧЕТ О ПП",
-        payload="menu_pp",
+        payload="/pp",
         intent=Intent.DEFAULT
     )
     btn_vkr = CallbackButton(
         text="📚 ВКР",
-        payload="menu_vkr",
+        payload="/vkr",
         intent=Intent.DEFAULT
     )
     btn_req = CallbackButton(
         text="📝 ОБЩИЕ ТРЕБОВАНИЯ",
-        payload="menu_requirements",
+        payload="/requirements",
         intent=Intent.DEFAULT
     )
     btn_privacy = CallbackButton(
         text="📄 ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ",
-        payload="menu_privacy",
+        payload="/privacy",
         intent=Intent.DEFAULT
     )
     
