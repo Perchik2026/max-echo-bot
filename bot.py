@@ -2,6 +2,9 @@ import os
 import asyncio
 from maxapi import Bot, Dispatcher
 from maxapi.types import MessageCreated
+from maxapi.types import CallbackButton, ButtonsPayload, Attachment
+from maxapi.enums.intent import Intent
+from maxapi.types import CallbackQuery  # это для обработки нажатий
 
 # Токен из переменной окружения
 TOKEN = os.environ.get("BOT_TOKEN")
@@ -13,16 +16,16 @@ dp = Dispatcher()
 
 # Приветственное сообщение
 WELCOME_MESSAGE = """
-🎓 *ДОБРО ПОЖАЛОВАТЬ!*
+🎓 ДОБРО ПОЖАЛОВАТЬ!
 
-**Выберите направление:**
+Выберите направление:
 
 📋 ОТЧЕТ О ПП (Преддипломная практика)
 📚 ВКР (Выпускная квалификационная работа)
 📝 ОБЩИЕ ТРЕБОВАНИЯ
 📄 ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ
 
-_Для выбора напишите:_
+Для выбора напишите:
 /pp - для работы с отчетом о преддипломной практике
 /vkr - для работы с ВКР
 /requirements - общие требования
@@ -666,6 +669,39 @@ PRIVACY_POLICY = """
 🔙 /start - Вернуться в главное меню
 """
 
+# ==================== КНОПКИ ====================
+
+def get_main_menu():
+    """Главное меню с кнопками"""
+    btn_pp = CallbackButton(
+        text="📋 ОТЧЕТ О ПП",
+        payload="menu_pp",
+        intent=Intent.DEFAULT
+    )
+    btn_vkr = CallbackButton(
+        text="📚 ВКР",
+        payload="menu_vkr",
+        intent=Intent.DEFAULT
+    )
+    btn_req = CallbackButton(
+        text="📝 ОБЩИЕ ТРЕБОВАНИЯ",
+        payload="menu_requirements",
+        intent=Intent.DEFAULT
+    )
+    btn_privacy = CallbackButton(
+        text="📄 ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ",
+        payload="menu_privacy",
+        intent=Intent.DEFAULT
+    )
+    
+    payload = ButtonsPayload(buttons=[
+        [btn_pp, btn_vkr],        # первый ряд
+        [btn_req, btn_privacy]    # второй ряд
+    ])
+    
+    return Attachment(type="inline_keyboard", payload=payload)
+
+
 # ==================== ОБРАБОТЧИКИ КОМАНД ====================
 
 @dp.message_created()
@@ -674,7 +710,7 @@ async def handle_all_messages(event: MessageCreated):
     text = event.message.body.text
     
     if not text:
-        await event.message.answer("Пожалуйста, используйте команды из меню." , format="HTML")
+        await event.message.answer("Пожалуйста, используйте команды из меню.")
         return
     
     # Приветствие и имя пользователя
@@ -682,7 +718,10 @@ async def handle_all_messages(event: MessageCreated):
     
     # ===== ГЛАВНОЕ МЕНЮ =====
     if text == "/start":
-        await event.message.answer(WELCOME_MESSAGE.format(user_name))
+        await event.message.answer(
+            text=WELCOME_MESSAGE.format(user_name),
+            attachments=[get_main_menu()]  # ← вот здесь кнопки
+        )
     
     # ===== МЕНЮ ПП =====
     elif text == "/pp":
