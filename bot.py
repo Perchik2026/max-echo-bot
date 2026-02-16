@@ -1,9 +1,10 @@
 import os
 import asyncio
 from maxapi import Bot, Dispatcher
-from maxapi.types import MessageCreated, Callback  # ← исправлено!
+from maxapi.types import MessageCreated
 from maxapi.types import CallbackButton, ButtonsPayload, Attachment
 from maxapi.enums.intent import Intent
+
 
 # Токен из переменной окружения
 TOKEN = os.environ.get("BOT_TOKEN")
@@ -670,35 +671,39 @@ PRIVACY_POLICY = """
 
 # ==================== КНОПКИ ====================
 
-def get_main_menu():
-    """Главное меню с кнопками"""
+def create_main_menu():
+    """Создаёт главное меню с кнопками"""
+
+    # Создаём кнопки
+    btn_start = CallbackButton(
+        text="📋 Главное меню",
+        payload="cmd_start",
+        intent=Intent.DEFAULT
+    )
+
     btn_pp = CallbackButton(
-        text="📋 ОТЧЕТ О ПП",
-        payload="/pp",
+        text="⚙️ ПП",
+        payload="cmd_pp",
         intent=Intent.DEFAULT
     )
+
     btn_vkr = CallbackButton(
-        text="📚 ВКР",
-        payload="/vkr",
-        intent=Intent.DEFAULT
+        text="💬 ВКР",
+        payload="cmd_vkr",
+        intent=Intent.POSITIVE
     )
-    btn_req = CallbackButton(
-        text="📝 ОБЩИЕ ТРЕБОВАНИЯ",
-        payload="/requirements",
-        intent=Intent.DEFAULT
+
+    # Группируем кнопки в ряды
+    # Каждый вложенный список — отдельный ряд
+    buttons_payload = ButtonsPayload(
+        buttons=[
+            [btn_start],  # Первый ряд: 1 кнопка
+            [btn_pp, btn_vkr] # Второй ряд: 2 кнопки
+        ]
     )
-    btn_privacy = CallbackButton(
-        text="📄 ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ",
-        payload="/privacy",
-        intent=Intent.DEFAULT
-    )
-    
-    payload = ButtonsPayload(buttons=[
-        [btn_pp, btn_vkr],        # первый ряд
-        [btn_req, btn_privacy]    # второй ряд
-    ])
-    
-    return Attachment(type="inline_keyboard", payload=payload)
+
+    # Создаём attachment для отправки
+    return Attachment(type="inline_keyboard", payload=buttons_payload)
 
 
 # ==================== ОБРАБОТЧИКИ КОМАНД ====================
