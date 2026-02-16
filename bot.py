@@ -1,8 +1,8 @@
 import asyncio
 import logging
-import os  # <--- Этого импорта не хватало!
+import os
 from maxapi import Bot, Dispatcher, F
-from maxapi.types import MessageCreated, MessageCallback, CallbackButton, ButtonsPayload, Attachment
+from maxapi.types import MessageCreated, MessageCallback, CallbackButton, ButtonsPayload, Attachment, BotStarted
 from maxapi.enums.intent import Intent
 from maxapi.context import MemoryContext, StatesGroup, State
 
@@ -35,7 +35,6 @@ RIDDLES = {
         'correct': 'Нет глаз на хвосте'
     }
 }
-
 
 def create_main_menu() -> Attachment:
     """Создаёт главное меню с кнопкой Начать"""
@@ -95,6 +94,18 @@ async def show_riddle(chat_id: int, context: MemoryContext, riddle_num: int):
         attachments=[keyboard]
     )
 
+@dp.bot_started()
+async def on_bot_started(event: BotStarted, context: MemoryContext):
+    """Приветствие при первом запуске бота"""
+    chat_id = event.chat.chat_id
+    main_menu = create_main_menu()
+    
+    await bot.send_message(
+        chat_id=chat_id,
+        text="👋 **Добро пожаловать в игру Загадки!**\n\n"
+             "Нажми кнопку **«Начать игру»** чтобы приступить",
+        attachments=[main_menu]
+    )
 
 @dp.message_created(F.message.body.text == '/start')
 async def cmd_start(event: MessageCreated):
