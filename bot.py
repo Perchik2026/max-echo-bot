@@ -1,4 +1,3 @@
-import os
 import asyncio
 import logging
 from maxapi import Bot, Dispatcher, F
@@ -9,9 +8,10 @@ from maxapi.context import MemoryContext, StatesGroup, State
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Токен берется из переменных окружения на Bothost
 TOKEN = os.environ.get("BOT_TOKEN")
 if not TOKEN:
-    raise ValueError("Переменная BOT_TOKEN не задана!")
+    raise ValueError("BOT_TOKEN не задан! Укажите токен в настройках бота на Bothost")
 
 bot = Bot(TOKEN)
 dp = Dispatcher()
@@ -43,8 +43,7 @@ def create_riddle_buttons(riddle_num: int, options: list) -> Attachment:
     buttons = []
     row = []
     
-    for i, option in enumerate(options):
-        # Создаём кнопку с payload, содержащим номер загадки и ответ
+    for option in options:
         btn = CallbackButton(
             text=option,
             payload=f"riddle_{riddle_num}_{option}",
@@ -52,9 +51,7 @@ def create_riddle_buttons(riddle_num: int, options: list) -> Attachment:
         )
         row.append(btn)
     
-    buttons.append(row)  # Все кнопки в одном ряду
-    
-    # Создаём payload и attachment
+    buttons.append(row)
     buttons_payload = ButtonsPayload(buttons=buttons)
     return Attachment(type="inline_keyboard", payload=buttons_payload)
 
@@ -62,14 +59,10 @@ def create_riddle_buttons(riddle_num: int, options: list) -> Attachment:
 async def show_riddle(chat_id: int, context: MemoryContext, riddle_num: int):
     """Показывает загадку с кнопками"""
     riddle = RIDDLES[riddle_num]
-    
-    # Создаём кнопки для загадки
     keyboard = create_riddle_buttons(riddle_num, riddle['options'])
     
-    # Сохраняем номер текущей загадки в контекст
     await context.update_data(current_riddle=riddle_num)
     
-    # Устанавливаем состояние для текущей загадки
     if riddle_num == 1:
         await context.set_state(RiddleGame.riddle1)
     else:
@@ -83,71 +76,121 @@ async def show_riddle(chat_id: int, context: MemoryContext, riddle_num: int):
 
 
 @dp.message_created()
+async def cmd_start(event: MessageCreated):
+    """Обработчик команды /start"""
+    if event.message.body.text == '/start':
+        chat_id = event.message.recipient.chat_id
+        await bot.send_message(
+            chat_id=chat_id,
+            text="👋 Привет! Я бот с загадками.\n\n"
+                 "Доступные команды:\n"
+                 "/riddles - начать игру в загадки\n"
+                 "/help - получить помощь"
+        )
+
+
+@dp.message_created()
+async def cmd_help(event: MessageCreated):
+    """Обработчик команды /help"""
+    if event.message.body.text == '/help':
+        chat_id = event.message.recipient.chat_id
+        await bot.send_message(
+            chat_id=chat_id,
+            text="📋 **Помощь**\n\n"
+                 "Правила игры:\n"
+                 "1. Введи /riddles чтобы начать\n"
+                 "2. Выбери ответ из кнопок\n"
+                 "3. Угадай все загадки до конца\n\n"
+                 "Удачи! 🍀"
+        )
+
+
+@dp.message_created()
 async def start_riddles(event: MessageCreated, context: MemoryContext):
-    """Начинаем игру с первой загадкой по команде /riddles"""
+    """Начинаем игру с первой загадкой"""
     if event.message.body.text == '/riddles':
         chat_id = event.message.recipient.chat_id
+        
+        current_state = await context.get_state()
+        if current_state:
+            await bot.send_message(
+                chat_id=chat_id,
+                text="⚠️ Вы уже в игре! Введите /cancel чтобы выйти"
+            )
+            return
+            
         await show_riddle(chat_id, context, 1)
+
+
+@dp.message_created()
+async def cmd_cancel(event: MessageCreated, context: MemoryContext):
+    """Отмена текущей игры"""
+    if event.message.body.text == '/cancel':
+        chat_id = event.message.recipient.chat_id
+        current_state = await context.get_state()
+        
+        if current_state:
+            await context.clear()
+            await bot.send_message(
+                chat_id=chat_id,
+                text="✅ Игра отменена. Введите /riddles чтобы начать заново."
+            )
+        else:
+            await bot.send_message(
+                chat_id=chat_id,
+                text="❌ Нет активной игры."
+            )
 
 
 @dp.message_callback(F.callback.payload.startswith("riddle_1_"))
 async def riddle1_handler(event: MessageCallback, context: MemoryContext):
     """Обработка ответа на первую загадку"""
-    
-    # Получаем payload и извлекаем ответ
     payload = event.callback.payload
     user_answer = payload.replace("riddle_1_", "")
     
-    riddle = RIDDLES[1]
-    chat_id = event.message.recipient.chat_id
-    
-    # Проверяем правильность ответа
-    if user_answer == riddle['correct']:
-        # Отправляем уведомление
+    if user_answer == RIDDLES[1]['correct']:
         await event.answer(notification="✅ Правильно!")
-        
-        # Отправляем сообщение
+        chat_id = event.message.recipient.chat_id
         await bot.send_message(
             chat_id=chat_id,
-            text="✅ Правильно! Переходим к следующей загадке..."
+            text="✅ Правильно! Следующая загадка:"
         )
-        
-        # Переходим ко второй загадке
         await show_riddle(chat_id, context, 2)
     else:
-        # Отправляем уведомление об ошибке
         await event.answer(notification="❌ Неправильно! Попробуй еще раз.")
 
 
 @dp.message_callback(F.callback.payload.startswith("riddle_2_"))
 async def riddle2_handler(event: MessageCallback, context: MemoryContext):
     """Обработка ответа на вторую загадку"""
-    
-    # Получаем payload и извлекаем ответ
     payload = event.callback.payload
     user_answer = payload.replace("riddle_2_", "")
     
-    riddle = RIDDLES[2]
-    chat_id = event.message.recipient.chat_id
-    
-    if user_answer == riddle['correct']:
-        # Отправляем уведомление
+    if user_answer == RIDDLES[2]['correct']:
         await event.answer(notification="🎉 Поздравляю!")
-        
-        # Отправляем сообщение
+        chat_id = event.message.recipient.chat_id
         await bot.send_message(
             chat_id=chat_id,
             text="🎉 Поздравляю! Ты отгадал все загадки!"
         )
-        
-        # Очищаем состояние
         await context.clear()
     else:
-        # Отправляем уведомление об ошибке
         await event.answer(notification="❌ Неправильно! Попробуй еще раз.")
 
 
+@dp.message_created()
+async def handle_unknown(event: MessageCreated):
+    """Обработчик неизвестных команд"""
+    if event.message.body.text.startswith('/'):
+        chat_id = event.message.recipient.chat_id
+        await bot.send_message(
+            chat_id=chat_id,
+            text="❌ Неизвестная команда. Введите /help"
+        )
+
+
 async def main():
+    logger.info("Бот с загадками запущен на Bothost!")
     await dp.start_polling(bot)
 
 
