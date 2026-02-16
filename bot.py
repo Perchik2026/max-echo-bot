@@ -35,8 +35,22 @@ RIDDLES = {
 
 @dp.message_created(lambda event: event.text and event.text.strip() == '/riddles')
 async def start_riddles(event: MessageCreated, context: MemoryContext):
-    logger.info(f"Старт игры для {event.user_id}")
-    await show_riddle(event.user_id, context, 1)
+    # Отладка: выводим структуру события
+    logger.info(f!Получено событие: {event}")
+    logger.info(f!Атрибуты: {dir(event)}")
+    logger.info(f!Сырые данные: {event.__dict__}")
+
+    # Предполагаем, что user_id находится в event.from_user.id
+    try:
+        user_id = event.from_user.id
+        logger.info(f!Определили user_id: {user_id}")
+        await show_riddle(user_id, context, 1)
+    except AttributeError as e:
+        logger.error(f"Не удалось получить user_id: {e}")
+        await bot.send_message(
+            user_id=event.chat.id,  # попытка использовать chat.id как запас
+            text="Ошибка: не удалось определить ваш ID."
+        )
 
 async def show_riddle(user_id: int, context: MemoryContext, riddle_num: int):
     riddle = RIDDLES[riddle_num]
@@ -56,11 +70,14 @@ async def show_riddle(user_id: int, context: MemoryContext, riddle_num: int):
         keyboard=reply_kb.as_markup()
     )
 
-# Обработчик нажатий кнопок (через message_created + проверка callback_data)
-@dp.message_created(
-    lambda e: e.callback_data is not None
-)
+@dp.message_created(lambda e: e.callback_data is not None)
 async def button_handler(event: MessageCreated, context: MemoryContext):
+    try:
+        user_id = event.from_user.id
+    except AttributeError:
+        logger.error("Не удалось получить user_id из события")
+        return
+
     state = await context.get_state()
 
     if state == RiddleGame.riddle1:
@@ -68,13 +85,13 @@ async def button_handler(event: MessageCreated, context: MemoryContext):
         user_answer = event.callback_data
         if user_answer == riddle['correct']:
             await bot.send_message(
-                user_id=event.user_id,
+                user_id=user_id,
                 text='✅ Правильно! Переходим к следующей загадке...'
             )
-            await show_riddle(event.user_id, context, 2)
+            await show_riddle(user_id, context, 2)
         else:
             await bot.send_message(
-                user_id=event.user_id,
+                user_id=user_id,
                 text='❌ Неправильно! Попробуй ещё раз.'
             )
 
@@ -83,13 +100,13 @@ async def button_handler(event: MessageCreated, context: MemoryContext):
         user_answer = event.callback_data
         if user_answer == riddle['correct']:
             await bot.send_message(
-                user_id=event.user_id,
+                user_id=user_id,
                 text='🎉 Поздравляю! Ты отгадал все загадки!'
             )
             await context.clear()
         else:
             await bot.send_message(
-                user_id=event.user_id,
+                user_id=user_id,
                 text='❌ Попробуй ещё раз!'
             )
 
