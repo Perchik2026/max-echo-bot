@@ -230,7 +230,7 @@ def format_schedule(schedule, teacher_name) -> list:
     total_days = len(schedule['tblData'])
     
     for day in schedule['tblData']:
-        if days_displayed >= 15:
+        if days_displayed >= 90:
             remaining = total_days - days_displayed
             if remaining > 0:
                 current_part += f"... и еще {remaining} дней\n\n"
@@ -270,24 +270,19 @@ def format_schedule(schedule, teacher_name) -> list:
         
         # Проверяем, помещается ли день
         if len(current_part) + len(day_text) > 3800:
-            # Текущая часть заполнена - сохраняем и начинаем новую
             parts.append(current_part)
-            # Новая часть начинается с этого дня
             current_part = f"📅 {schedule.get('itemName', 'Расписание')} (продолжение)\n"
             current_part += f"👤 {teacher_name}\n"
             current_part += f"📆 {schedule.get('interval', '')}\n\n"
-            # Добавляем текущий день в новую часть
             current_part += day_text
         else:
             current_part += day_text
         
         days_displayed += 1
     
-    # Добавляем последнюю часть, если она не пустая
     if current_part:
         parts.append(current_part)
     
-    # Если частей нет (пустое расписание), возвращаем сообщение
     if not parts:
         return ["📭 Занятий нет в выбранный период"]
     
