@@ -10,7 +10,10 @@ from maxapi.types import MessageCreated, MessageCallback, CallbackButton, Button
 from maxapi.enums.intent import Intent
 from maxapi.context import MemoryContext, StatesGroup, State
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 TOKEN = os.environ.get("BOT_TOKEN")
@@ -41,20 +44,23 @@ INTERVAL_MODES = {
 
 class ScheduleStates(StatesGroup):
     """Состояния бота"""
-    searching = State()          # Поиск преподавателя
-    selecting_teacher = State()  # Выбор преподавателя из списка
-    selecting_period = State()   # Выбор периода
-    awaiting_start_date = State() # Ожидание начальной даты
-    awaiting_end_date = State()   # Ожидание конечной даты
-    showing_schedule = State()   # Показ расписания
+    searching = State()
+    selecting_teacher = State()
+    selecting_period = State()
+    awaiting_start_date = State()
+    awaiting_end_date = State()
+    showing_schedule = State()
 
 def load_user_data():
     """Загрузка статистики пользователей"""
     if os.path.exists(STATS_FILE):
-        with open(STATS_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            logger.info(f"ЗАГРУЖЕНО: {len(data)} пользователей")
-            return data
+        try:
+            with open(STATS_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                logger.info(f"ЗАГРУЖЕНО: {len(data)} пользователей")
+                return data
+        except Exception as e:
+            logger.error(f"Ошибка загрузки: {e}")
     return {}
 
 def save_user_data(data):
@@ -76,8 +82,8 @@ def record_user_search(chat_id, username, first_name, query):
         
         if chat_id_str not in user_data:
             user_data[chat_id_str] = {
-                'username': username,
-                'first_name': first_name,
+                'username': username or 'unknown',
+                'first_name': first_name or 'user',
                 'created_at': datetime.now().isoformat(),
                 'search_requests': []
             }
@@ -88,7 +94,6 @@ def record_user_search(chat_id, username, first_name, query):
         }
         user_data[chat_id_str]['search_requests'].append(search_request)
         
-        # Оставляем только последние 50 запросов
         if len(user_data[chat_id_str]['search_requests']) > 50:
             user_data[chat_id_str]['search_requests'] = user_data[chat_id_str]['search_requests'][-50:]
         
@@ -205,14 +210,17 @@ def create_teacher_list_buttons(teachers: list) -> Attachment:
     """Создание кнопок со списком преподавателей"""
     buttons = []
     for i, teacher in enumerate(teachers):
+        # Обрезаем длинные имена
+        name = teacher['name']
+        if len(name) > 30:
+            name = name[:27] + '...'
         btn = CallbackButton(
-            text=f"{i+1}. {teacher['name']}",
+            text=f"{i+1}. {name}",
             payload=f"teacher_{i}",
             intent=Intent.DEFAULT
         )
         buttons.append([btn])
     
-    # Кнопка отмены
     buttons.append([
         CallbackButton(
             text="❌ Отмена",
@@ -234,7 +242,6 @@ def create_period_buttons() -> Attachment:
         )
         buttons.append([btn])
     
-    # Кнопка отмены
     buttons.append([
         CallbackButton(
             text="❌ Отмена",
@@ -350,144 +357,220 @@ def is_valid_date_range(start_date, end_date):
 async def on_bot_started(event: BotStarted, context: MemoryContext):
     """Приветствие при первом запуске"""
     chat_id = event.chat.chat_id
-    await bot.send_message(
-        chat_id=chat_id,
-        text="🎓 **Бот расписания РГГУ**\n\n"
-             "Я помогу найти расписание преподавателей.\n\n"
-             "🔍 Нажми кнопку **«Найти преподавателя»** чтобы начать поиск.",
-        attachments=[create_main_menu()]
-    )
+    try:
+        await bot.send_message(
+            chat_id=chat_id,
+            text="🎓 **Бот расписания РГГУ**\n\n"
+                 "Я помогу найти расписание преподавателей.\n\n"
+                 "🔍 Нажми кнопку **«Найти преподавателя»** чтобы начать поиск.",
+            attachments=[create_main_menu()]
+        )
+    except Exception as e:
+        logger.error(f"Ошибка в on_bot_started: {e}")
 
 @dp.message_created(F.message.body.text == '/start')
 async def cmd_start(event: MessageCreated):
     """Обработчик команды /start"""
     chat_id = event.message.recipient.chat_id
-    await context_clear(chat_id)
-    
-    await bot.send_message(
-        chat_id=chat_id,
-        text="🎓 **Бот расписания РГГУ**\n\n"
-             "Я помогу найти расписание преподавателей.\n\n"
-             "🔍 Нажми кнопку **«Найти преподавателя»** чтобы начать поиск.",
-        attachments=[create_main_menu()]
-    )
+    try:
+        await bot.send_message(
+            chat_id=chat_id,
+            text="🎓 **Бот расписания РГГУ**\n\n"
+                 "Я помогу найти расписание преподавателей.\n\n"
+                 "🔍 Нажми кнопку **«Найти преподавателя»** чтобы начать поиск.",
+            attachments=[create_main_menu()]
+        )
+    except Exception as e:
+        logger.error(f"Ошибка в cmd_start: {e}")
 
 @dp.message_created(F.message.body.text == '/help')
 async def cmd_help(event: MessageCreated):
     """Обработчик команды /help"""
     chat_id = event.message.recipient.chat_id
-    await bot.send_message(
-        chat_id=chat_id,
-        text="📋 **Помощь**\n\n"
-             "/start - Главное меню\n"
-             "/cancel - Отмена текущего действия\n"
-             "/help - Эта справка\n\n"
-             "**Как пользоваться:**\n"
-             "1. Нажмите «Найти преподавателя»\n"
-             "2. Введите фамилию\n"
-             "3. Выберите преподавателя из списка\n"
-             "4. Выберите период расписания\n"
-             "5. Получите расписание!",
-        attachments=[create_main_menu()]
-    )
+    try:
+        await bot.send_message(
+            chat_id=chat_id,
+            text="📋 **Помощь**\n\n"
+                 "/start - Главное меню\n"
+                 "/cancel - Отмена текущего действия\n"
+                 "/help - Эта справка\n\n"
+                 "**Как пользоваться:**\n"
+                 "1. Нажмите «Найти преподавателя»\n"
+                 "2. Введите фамилию\n"
+                 "3. Выберите преподавателя из списка\n"
+                 "4. Выберите период расписания\n"
+                 "5. Получите расписание!",
+            attachments=[create_main_menu()]
+        )
+    except Exception as e:
+        logger.error(f"Ошибка в cmd_help: {e}")
 
 @dp.message_created(F.message.body.text == '/cancel')
 async def cmd_cancel(event: MessageCreated, context: MemoryContext):
     """Обработчик команды /cancel"""
     chat_id = event.message.recipient.chat_id
-    await context.clear()
-    await bot.send_message(
-        chat_id=chat_id,
-        text="✅ Действие отменено. Вы вернулись в главное меню.",
-        attachments=[create_main_menu()]
-    )
-
-@dp.message_created(F.message.body.text == '/stats')
-async def cmd_stats(event: MessageCreated):
-    """Обработчик команды /stats"""
-    chat_id = event.message.recipient.chat_id
-    await show_stats(chat_id)
+    try:
+        await context.clear()
+        await bot.send_message(
+            chat_id=chat_id,
+            text="✅ Действие отменено. Вы вернулись в главное меню.",
+            attachments=[create_main_menu()]
+        )
+    except Exception as e:
+        logger.error(f"Ошибка в cmd_cancel: {e}")
 
 # ==================== ОБРАБОТЧИКИ КНОПОК ====================
 
 @dp.message_callback(F.callback.payload == "cmd_search")
 async def callback_search(event: MessageCallback, context: MemoryContext):
     """Обработка кнопки 'Найти преподавателя'"""
-    await event.answer(notification="🔍 Начинаем поиск...")
     chat_id = event.message.recipient.chat_id
     
-    # Очищаем контекст
-    await context.clear()
-    await context.set_state(ScheduleStates.searching)
+    # Всегда отправляем ответ на callback
+    await event.answer(notification="🔍 Начинаем поиск...")
     
-    await bot.send_message(
-        chat_id=chat_id,
-        text="🔍 **Введите фамилию преподавателя**\n\n"
-             "Например: Иванов, Петрова, Смирнов\n\n"
-             "❌ Для отмены введите /cancel"
-    )
+    try:
+        await context.clear()
+        await context.set_state(ScheduleStates.searching)
+        
+        await bot.send_message(
+            chat_id=chat_id,
+            text="🔍 **Введите фамилию преподавателя**\n\n"
+                 "Например: Иванов, Петрова, Смирнов\n\n"
+                 "❌ Для отмены введите /cancel"
+        )
+    except Exception as e:
+        logger.error(f"Ошибка в callback_search: {e}")
 
 @dp.message_callback(F.callback.payload == "cmd_stats")
 async def callback_stats(event: MessageCallback):
     """Обработка кнопки 'Статистика'"""
-    await event.answer(notification="📊 Загружаю статистику...")
     chat_id = event.message.recipient.chat_id
-    await show_stats(chat_id)
+    
+    await event.answer(notification="📊 Загружаю статистику...")
+    
+    try:
+        user_data = load_user_data()
+        
+        if not user_data:
+            await bot.send_message(
+                chat_id=chat_id,
+                text="📊 Статистика пока пуста.\n\n"
+                     "Начните искать расписание, и данные появятся здесь!",
+                attachments=[create_main_menu()]
+            )
+            return
+        
+        total_users = len(user_data)
+        total_searches = sum(len(u.get('search_requests', [])) for u in user_data.values())
+        
+        stats_text = f"📊 **Статистика бота**\n\n"
+        stats_text += f"👥 Всего пользователей: {total_users}\n"
+        stats_text += f"🔍 Всего поисков: {total_searches}\n\n"
+        
+        top_users = sorted(
+            user_data.items(),
+            key=lambda x: len(x[1].get('search_requests', [])),
+            reverse=True
+        )[:5]
+        
+        if top_users:
+            stats_text += "🏆 **Топ 5 активных пользователей:**\n"
+            for i, (chat_id_str, data) in enumerate(top_users, 1):
+                username = data.get('username', 'unknown')
+                searches = len(data.get('search_requests', []))
+                stats_text += f"{i}. @{username} — {searches} запросов\n"
+        
+        await bot.send_message(
+            chat_id=chat_id,
+            text=stats_text,
+            attachments=[create_main_menu()]
+        )
+    except Exception as e:
+        logger.error(f"Ошибка в callback_stats: {e}")
 
 @dp.message_callback(F.callback.payload == "cmd_help")
 async def callback_help(event: MessageCallback):
     """Обработка кнопки 'Помощь'"""
     await event.answer(notification="📋 Справка")
+    
     chat_id = event.message.recipient.chat_id
-    await cmd_help(event)
+    try:
+        await bot.send_message(
+            chat_id=chat_id,
+            text="📋 **Помощь**\n\n"
+                 "/start - Главное меню\n"
+                 "/cancel - Отмена текущего действия\n"
+                 "/help - Эта справка\n\n"
+                 "**Как пользоваться:**\n"
+                 "1. Нажмите «Найти преподавателя»\n"
+                 "2. Введите фамилию\n"
+                 "3. Выберите преподавателя из списка\n"
+                 "4. Выберите период расписания\n"
+                 "5. Получите расписание!",
+            attachments=[create_main_menu()]
+        )
+    except Exception as e:
+        logger.error(f"Ошибка в callback_help: {e}")
 
 @dp.message_callback(F.callback.payload == "cmd_main")
 async def callback_main(event: MessageCallback, context: MemoryContext):
     """Обработка кнопки 'Главное меню'"""
     await event.answer()
+    
     chat_id = event.message.recipient.chat_id
-    await context.clear()
-    await bot.send_message(
-        chat_id=chat_id,
-        text="🏠 **Главное меню**\n\nВыберите действие:",
-        attachments=[create_main_menu()]
-    )
+    try:
+        await context.clear()
+        await bot.send_message(
+            chat_id=chat_id,
+            text="🏠 **Главное меню**\n\nВыберите действие:",
+            attachments=[create_main_menu()]
+        )
+    except Exception as e:
+        logger.error(f"Ошибка в callback_main: {e}")
 
 @dp.message_callback(F.callback.payload == "cmd_cancel")
 async def callback_cancel(event: MessageCallback, context: MemoryContext):
     """Обработка кнопки 'Отмена'"""
     await event.answer(notification="✅ Отменено")
+    
     chat_id = event.message.recipient.chat_id
-    await context.clear()
-    await bot.send_message(
-        chat_id=chat_id,
-        text="✅ Действие отменено. Вы вернулись в главное меню.",
-        attachments=[create_main_menu()]
-    )
+    try:
+        await context.clear()
+        await bot.send_message(
+            chat_id=chat_id,
+            text="✅ Действие отменено. Вы вернулись в главное меню.",
+            attachments=[create_main_menu()]
+        )
+    except Exception as e:
+        logger.error(f"Ошибка в callback_cancel: {e}")
 
 @dp.message_callback(F.callback.payload == "cmd_periods")
 async def callback_periods(event: MessageCallback, context: MemoryContext):
     """Обработка кнопки 'Другой период'"""
     await event.answer()
+    
     chat_id = event.message.recipient.chat_id
-    
-    data = await context.get_data()
-    teacher = data.get('selected_teacher')
-    
-    if teacher:
-        await context.set_state(ScheduleStates.selecting_period)
-        await bot.send_message(
-            chat_id=chat_id,
-            text=f"✅ Выбран: {teacher['name']}\n\n"
-                 f"**Выберите период:**",
-            attachments=[create_period_buttons()]
-        )
-    else:
-        await bot.send_message(
-            chat_id=chat_id,
-            text="❌ Ошибка: преподаватель не найден. Начните заново.",
-            attachments=[create_main_menu()]
-        )
+    try:
+        data = await context.get_data()
+        teacher = data.get('selected_teacher')
+        
+        if teacher:
+            await context.set_state(ScheduleStates.selecting_period)
+            await bot.send_message(
+                chat_id=chat_id,
+                text=f"✅ Выбран: {teacher['name']}\n\n"
+                     f"**Выберите период:**",
+                attachments=[create_period_buttons()]
+            )
+        else:
+            await bot.send_message(
+                chat_id=chat_id,
+                text="❌ Ошибка: преподаватель не найден. Начните заново.",
+                attachments=[create_main_menu()]
+            )
+    except Exception as e:
+        logger.error(f"Ошибка в callback_periods: {e}")
 
 @dp.message_callback(F.callback.payload.startswith("teacher_"))
 async def callback_select_teacher(event: MessageCallback, context: MemoryContext):
@@ -524,51 +607,73 @@ async def callback_select_period(event: MessageCallback, context: MemoryContext)
     chat_id = event.message.recipient.chat_id
     period_key = event.callback.payload.split('_')[1]
     
-    data = await context.get_data()
-    teacher = data.get('selected_teacher')
+    await event.answer(notification="📅 Загружаю...")
     
-    if not teacher:
-        await event.answer(notification="❌ Ошибка: преподаватель не выбран")
-        return
-    
-    if period_key not in INTERVAL_MODES:
-        await event.answer(notification="❌ Неверный период")
-        return
-    
-    period_info = INTERVAL_MODES[period_key]
-    
-    if period_key == '5':
-        # Произвольные даты
-        await context.set_state(ScheduleStates.awaiting_start_date)
-        await event.answer(notification="📅 Введите даты")
-        await bot.send_message(
-            chat_id=chat_id,
-            text="📅 **Введите начальную дату** в формате ДД.ММ.ГГГГ\n"
-                 "Пример: 15.12.2025\n\n"
-                 "❌ Для отмены введите /cancel"
-        )
-        return
-    
-    await event.answer(notification=f"📅 Загружаю {period_info['name']}...")
-    
-    # Загружаем расписание
-    schedule = api_client.get_teacher_schedule(teacher['id'], period_info['mode'])
-    
-    if schedule:
-        formatted = format_schedule(schedule, teacher['name'])
-        await bot.send_message(chat_id=chat_id, text=formatted)
+    try:
+        data = await context.get_data()
+        teacher = data.get('selected_teacher')
         
-        await context.set_state(ScheduleStates.showing_schedule)
+        if not teacher:
+            await bot.send_message(
+                chat_id=chat_id,
+                text="❌ Ошибка: преподаватель не выбран. Начните заново.",
+                attachments=[create_main_menu()]
+            )
+            return
+        
+        if period_key not in INTERVAL_MODES:
+            await bot.send_message(
+                chat_id=chat_id,
+                text="❌ Неверный период. Выберите из предложенных.",
+                attachments=[create_period_buttons()]
+            )
+            return
+        
+        period_info = INTERVAL_MODES[period_key]
+        
+        if period_key == '5':
+            # Произвольные даты
+            await context.set_state(ScheduleStates.awaiting_start_date)
+            await bot.send_message(
+                chat_id=chat_id,
+                text="📅 **Введите начальную дату** в формате ДД.ММ.ГГГГ\n"
+                     "Пример: 15.12.2025\n\n"
+                     "❌ Для отмены введите /cancel"
+            )
+            return
+        
+        # Загружаем расписание
+        schedule = api_client.get_teacher_schedule(teacher['id'], period_info['mode'])
+        
+        if schedule:
+            formatted = format_schedule(schedule, teacher['name'])
+            
+            # Разбиваем длинные сообщения
+            if len(formatted) > 4000:
+                parts = [formatted[i:i+4000] for i in range(0, len(formatted), 4000)]
+                for part in parts:
+                    await bot.send_message(chat_id=chat_id, text=part)
+            else:
+                await bot.send_message(chat_id=chat_id, text=formatted)
+            
+            await context.set_state(ScheduleStates.showing_schedule)
+            await bot.send_message(
+                chat_id=chat_id,
+                text="✅ Расписание показано!\n\n"
+                     "**Что дальше?**",
+                attachments=[create_continue_menu()]
+            )
+        else:
+            await bot.send_message(
+                chat_id=chat_id,
+                text="❌ Не удалось загрузить расписание. Попробуйте позже.",
+                attachments=[create_main_menu()]
+            )
+    except Exception as e:
+        logger.error(f"Ошибка в callback_select_period: {e}")
         await bot.send_message(
             chat_id=chat_id,
-            text="✅ Расписание показано!\n\n"
-                 "**Что дальше?**",
-            attachments=[create_continue_menu()]
-        )
-    else:
-        await bot.send_message(
-            chat_id=chat_id,
-            text="❌ Не удалось загрузить расписание. Попробуйте позже.",
+            text="❌ Произошла ошибка. Попробуйте позже.",
             attachments=[create_main_menu()]
         )
 
@@ -583,184 +688,157 @@ async def handle_message(event: MessageCreated, context: MemoryContext):
     if not text or text.startswith('/'):
         return
     
-    current_state = await context.get_state()
-    username = event.message.sender.username or 'unknown'
-    first_name = event.message.sender.first_name or 'user'
-    
-    # Состояние: поиск преподавателя
-    if current_state == ScheduleStates.searching:
-        await handle_teacher_search(chat_id, text, username, first_name, context)
-        return
-    
-    # Состояние: ожидание начальной даты
-    if current_state == ScheduleStates.awaiting_start_date:
-        await handle_start_date(chat_id, text, context)
-        return
-    
-    # Состояние: ожидание конечной даты
-    if current_state == ScheduleStates.awaiting_end_date:
-        await handle_end_date(chat_id, text, context)
-        return
-    
-    # Если пользователь ввел текст в непонятном состоянии
-    await bot.send_message(
-        chat_id=chat_id,
-        text="❓ Используйте кнопки для навигации или введите /start для начала.",
-        attachments=[create_main_menu()]
-    )
+    try:
+        current_state = await context.get_state()
+        username = event.message.sender.username or 'unknown'
+        first_name = event.message.sender.first_name or 'user'
+        
+        # Состояние: поиск преподавателя
+        if current_state == ScheduleStates.searching:
+            await handle_teacher_search(chat_id, text, username, first_name, context)
+            return
+        
+        # Состояние: ожидание начальной даты
+        if current_state == ScheduleStates.awaiting_start_date:
+            await handle_start_date(chat_id, text, context)
+            return
+        
+        # Состояние: ожидание конечной даты
+        if current_state == ScheduleStates.awaiting_end_date:
+            await handle_end_date(chat_id, text, context)
+            return
+        
+        # Если пользователь ввел текст в непонятном состоянии
+        await bot.send_message(
+            chat_id=chat_id,
+            text="❓ Используйте кнопки для навигации или введите /start для начала.",
+            attachments=[create_main_menu()]
+        )
+    except Exception as e:
+        logger.error(f"Ошибка в handle_message: {e}")
 
 async def handle_teacher_search(chat_id: int, query: str, username: str, first_name: str, context: MemoryContext):
     """Обработка поиска преподавателя"""
-    # Записываем статистику
-    record_user_search(chat_id, username, first_name, query)
-    
-    await bot.send_message(
-        chat_id=chat_id,
-        text=f"🔍 Ищу: {query}..."
-    )
-    
-    teachers = api_client.search_teachers(query)
-    
-    if not teachers:
+    try:
+        # Записываем статистику
+        record_user_search(chat_id, username, first_name, query)
+        
         await bot.send_message(
             chat_id=chat_id,
-            text="❌ Преподаватели не найдены.\n\n"
-                 "🔍 Попробуйте ввести другую фамилию\n"
-                 "❌ Для отмены введите /cancel"
+            text=f"🔍 Ищу: {query}..."
         )
-        return
-    
-    # Сохраняем список преподавателей в контексте
-    await context.update_data(teachers_list=teachers)
-    await context.set_state(ScheduleStates.selecting_teacher)
-    
-    await bot.send_message(
-        chat_id=chat_id,
-        text=f"📋 **Найдено преподавателей:** {len(teachers)}\n\n"
-             f"**Выберите преподавателя:**",
-        attachments=[create_teacher_list_buttons(teachers)]
-    )
+        
+        teachers = api_client.search_teachers(query)
+        
+        if not teachers:
+            await bot.send_message(
+                chat_id=chat_id,
+                text="❌ Преподаватели не найдены.\n\n"
+                     "🔍 Попробуйте ввести другую фамилию\n"
+                     "❌ Для отмены введите /cancel"
+            )
+            return
+        
+        # Сохраняем список преподавателей в контексте
+        await context.update_data(teachers_list=teachers)
+        await context.set_state(ScheduleStates.selecting_teacher)
+        
+        await bot.send_message(
+            chat_id=chat_id,
+            text=f"📋 **Найдено преподавателей:** {len(teachers)}\n\n"
+                 f"**Выберите преподавателя:**",
+            attachments=[create_teacher_list_buttons(teachers)]
+        )
+    except Exception as e:
+        logger.error(f"Ошибка в handle_teacher_search: {e}")
 
 async def handle_start_date(chat_id: int, text: str, context: MemoryContext):
     """Обработка ввода начальной даты"""
-    if is_valid_date(text):
-        await context.update_data(start_date=text)
-        await context.set_state(ScheduleStates.awaiting_end_date)
-        await bot.send_message(
-            chat_id=chat_id,
-            text="📅 **Введите конечную дату** в формате ДД.ММ.ГГГГ\n"
-                 "Пример: 20.12.2025\n\n"
-                 "❌ Для отмены введите /cancel"
-        )
-    else:
-        await bot.send_message(
-            chat_id=chat_id,
-            text="❌ **Неверный формат даты!**\n\n"
-                 "Используйте формат: ДД.ММ.ГГГГ\n"
-                 "Пример: 15.12.2025"
-        )
+    try:
+        if is_valid_date(text):
+            await context.update_data(start_date=text)
+            await context.set_state(ScheduleStates.awaiting_end_date)
+            await bot.send_message(
+                chat_id=chat_id,
+                text="📅 **Введите конечную дату** в формате ДД.ММ.ГГГГ\n"
+                     "Пример: 20.12.2025\n\n"
+                     "❌ Для отмены введите /cancel"
+            )
+        else:
+            await bot.send_message(
+                chat_id=chat_id,
+                text="❌ **Неверный формат даты!**\n\n"
+                     "Используйте формат: ДД.ММ.ГГГГ\n"
+                     "Пример: 15.12.2025"
+            )
+    except Exception as e:
+        logger.error(f"Ошибка в handle_start_date: {e}")
 
 async def handle_end_date(chat_id: int, text: str, context: MemoryContext):
     """Обработка ввода конечной даты"""
-    if is_valid_date(text):
-        data = await context.get_data()
-        start_date = data.get('start_date')
-        
-        if is_valid_date_range(start_date, text):
-            teacher = data.get('selected_teacher')
+    try:
+        if is_valid_date(text):
+            data = await context.get_data()
+            start_date = data.get('start_date')
             
-            if teacher:
-                await bot.send_message(
-                    chat_id=chat_id,
-                    text=f"📅 Загружаю расписание с {start_date} по {text}..."
-                )
+            if is_valid_date_range(start_date, text):
+                teacher = data.get('selected_teacher')
                 
-                schedule = api_client.get_teacher_schedule(
-                    teacher['id'], 5, start_date, text
-                )
-                
-                if schedule:
-                    formatted = format_schedule(schedule, teacher['name'])
-                    await bot.send_message(chat_id=chat_id, text=formatted)
-                    
-                    await context.set_state(ScheduleStates.showing_schedule)
+                if teacher:
                     await bot.send_message(
                         chat_id=chat_id,
-                        text="✅ Расписание показано!\n\n"
-                             "**Что дальше?**",
-                        attachments=[create_continue_menu()]
+                        text=f"📅 Загружаю расписание с {start_date} по {text}..."
                     )
+                    
+                    schedule = api_client.get_teacher_schedule(
+                        teacher['id'], 5, start_date, text
+                    )
+                    
+                    if schedule:
+                        formatted = format_schedule(schedule, teacher['name'])
+                        
+                        if len(formatted) > 4000:
+                            parts = [formatted[i:i+4000] for i in range(0, len(formatted), 4000)]
+                            for part in parts:
+                                await bot.send_message(chat_id=chat_id, text=part)
+                        else:
+                            await bot.send_message(chat_id=chat_id, text=formatted)
+                        
+                        await context.set_state(ScheduleStates.showing_schedule)
+                        await bot.send_message(
+                            chat_id=chat_id,
+                            text="✅ Расписание показано!\n\n"
+                                 "**Что дальше?**",
+                            attachments=[create_continue_menu()]
+                        )
+                    else:
+                        await bot.send_message(
+                            chat_id=chat_id,
+                            text="❌ Не удалось загрузить расписание. Попробуйте позже.",
+                            attachments=[create_main_menu()]
+                        )
                 else:
                     await bot.send_message(
                         chat_id=chat_id,
-                        text="❌ Не удалось загрузить расписание. Попробуйте позже.",
+                        text="❌ Ошибка: преподаватель не выбран. Начните заново.",
                         attachments=[create_main_menu()]
                     )
             else:
                 await bot.send_message(
                     chat_id=chat_id,
-                    text="❌ Ошибка: преподаватель не выбран. Начните заново.",
-                    attachments=[create_main_menu()]
+                    text="❌ **Конечная дата не может быть раньше начальной!**\n\n"
+                         f"Начальная: {start_date}\n"
+                         f"Введите конечную дату позже:"
                 )
         else:
             await bot.send_message(
                 chat_id=chat_id,
-                text="❌ **Конечная дата не может быть раньше начальной!**\n\n"
-                     f"Начальная: {start_date}\n"
-                     f"Введите конечную дату позже:"
+                text="❌ **Неверный формат даты!**\n\n"
+                     "Используйте формат: ДД.ММ.ГГГГ\n"
+                     "Пример: 20.12.2025"
             )
-    else:
-        await bot.send_message(
-            chat_id=chat_id,
-            text="❌ **Неверный формат даты!**\n\n"
-                 "Используйте формат: ДД.ММ.ГГГГ\n"
-                 "Пример: 20.12.2025"
-        )
-
-async def show_stats(chat_id: int):
-    """Показ статистики"""
-    user_data = load_user_data()
-    
-    if not user_data:
-        await bot.send_message(
-            chat_id=chat_id,
-            text="📊 Статистика пока пуста.\n\n"
-                 "Начните искать расписание, и данные появятся здесь!",
-            attachments=[create_main_menu()]
-        )
-        return
-    
-    total_users = len(user_data)
-    total_searches = sum(len(u.get('search_requests', [])) for u in user_data.values())
-    
-    stats_text = f"📊 **Статистика бота**\n\n"
-    stats_text += f"👥 Всего пользователей: {total_users}\n"
-    stats_text += f"🔍 Всего поисков: {total_searches}\n\n"
-    
-    # Топ 5 активных пользователей
-    top_users = sorted(
-        user_data.items(),
-        key=lambda x: len(x[1].get('search_requests', [])),
-        reverse=True
-    )[:5]
-    
-    if top_users:
-        stats_text += "🏆 **Топ 5 активных пользователей:**\n"
-        for i, (chat_id_str, data) in enumerate(top_users, 1):
-            username = data.get('username', 'unknown')
-            searches = len(data.get('search_requests', []))
-            stats_text += f"{i}. @{username} — {searches} запросов\n"
-    
-    await bot.send_message(
-        chat_id=chat_id,
-        text=stats_text,
-        attachments=[create_main_menu()]
-    )
-
-async def context_clear(chat_id: int):
-    """Очистка контекста (заглушка для совместимости)"""
-    # В MAX контекст очищается через MemoryContext.clear()
-    pass
+    except Exception as e:
+        logger.error(f"Ошибка в handle_end_date: {e}")
 
 # ==================== ЗАПУСК БОТА ====================
 
