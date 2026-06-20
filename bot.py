@@ -263,7 +263,7 @@ def format_schedule(schedule, teacher_name) -> list:
         day_text += "─" * 10 + "\n\n"
         
         # Проверяем, не превысит ли добавление дня лимит
-        if len(result) + len(day_text) > 3850:  # Оставляем запас
+        if len(result) + len(day_text) > 3400:  # Оставляем запас
             # Сохраняем текущий результат как часть
             # Добавляем завершающее сообщение о том, что будет продолжение
             result += "... продолжение в следующем сообщении\n\n"
@@ -278,11 +278,11 @@ def format_schedule(schedule, teacher_name) -> list:
         if remaining > 0:
             result += f"... и еще {remaining} дней\n\n"
     
-    # Разбиваем результат на части по 3950 символов
+    # Разбиваем результат на части по 3500 символов
     parts = []
-    if len(result) > 3950:
-        for i in range(0, len(result), 3950):
-            parts.append(result[i:i+3950])
+    if len(result) > 3500:
+        for i in range(0, len(result), 3500):
+            parts.append(result[i:i+3500])
     else:
         parts.append(result)
     
