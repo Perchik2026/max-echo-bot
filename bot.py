@@ -210,12 +210,16 @@ def create_continue_menu() -> Attachment:
 
 # ==================== ФОРМАТИРОВАНИЕ РАСПИСАНИЯ ====================
 
-def format_schedule(schedule, teacher_name) -> str:
+def format_schedule(schedule, teacher_name) -> list:
+    """
+    Форматирование расписания для отправки.
+    Возвращает список частей, каждая не больше 4000 символов.
+    """
     if not schedule or 'tblData' not in schedule:
-        return "❌ Не удалось загрузить расписание"
+        return ["❌ Не удалось загрузить расписание"]
     
     if not schedule['tblData']:
-        return "📭 Занятий нет в выбранный период"
+        return ["📭 Занятий нет в выбранный период"]
     
     result = f"📅 {schedule.get('itemName', 'Расписание')}\n"
     result += f"👤 {teacher_name}\n"
@@ -226,7 +230,7 @@ def format_schedule(schedule, teacher_name) -> str:
         if days_displayed >= 15:
             break
             
-        result += f"📅 {day.get('date', '')}\n"
+        day_text = f"📅 {day.get('date', '')}\n"
         
         if 'pairs' in day and day['pairs']:
             for pair in day['pairs']:
@@ -235,34 +239,54 @@ def format_schedule(schedule, teacher_name) -> str:
                         pair_num = pair.get('pair', '')
                         pair_time = PAIR_TIMES.get(str(pair_num), '')
                         
-                        result += f"🕒 Пара {pair_num} ({pair_time})\n"
-                        result += f"📚 {flow.get('subject', '')}\n"
-                        result += f"🎯 {flow.get('lessontype', '')}\n"
+                        day_text += f"🕒 Пара {pair_num} ({pair_time})\n"
+                        day_text += f"📚 {flow.get('subject', '')}\n"
+                        day_text += f"🎯 {flow.get('lessontype', '')}\n"
                         
                         flow_name = flow.get('flow', '')
                         course = flow.get('course', '')
                         
                         if flow_name and flow_name != '-':
                             if course and course != '-':
-                                result += f"👥 Поток: {flow_name} (курс {course})\n"
+                                day_text += f"👥 Поток: {flow_name} (курс {course})\n"
                             else:
-                                result += f"👥 Поток: {flow_name}\n"
+                                day_text += f"👥 Поток: {flow_name}\n"
                         
                         room = flow.get('room', '')
                         if room:
-                            result += f"🏫 Аудитория: {room}\n"
+                            day_text += f"🏫 Аудитория: {room}\n"
                         
-                        result += "\n"
+                        day_text += "\n"
         else:
-            result += "📭 Нет занятий\n"
+            day_text += "📭 Нет занятий\n"
             
-        result += "─" * 10 + "\n\n"
+        day_text += "─" * 10 + "\n\n"
+        
+        # Проверяем, не превысит ли добавление дня лимит
+        if len(result) + len(day_text) > 3900:  # Оставляем запас
+            # Сохраняем текущий результат как часть
+            # Добавляем завершающее сообщение о том, что будет продолжение
+            result += "... продолжение в следующем сообщении\n\n"
+            days_displayed += 1
+            break
+        
+        result += day_text
         days_displayed += 1
     
     if days_displayed < len(schedule['tblData']):
-        result += f"... и еще {len(schedule['tblData']) - days_displayed} дней\n\n"
+        remaining = len(schedule['tblData']) - days_displayed
+        if remaining > 0:
+            result += f"... и еще {remaining} дней\n\n"
     
-    return result
+    # Разбиваем результат на части по 4000 символов
+    parts = []
+    if len(result) > 4000:
+        for i in range(0, len(result), 4000):
+            parts.append(result[i:i+4000])
+    else:
+        parts.append(result)
+    
+    return parts
 
 def is_valid_date(date_string):
     try:
@@ -513,14 +537,9 @@ async def callback_select_period(event: MessageCallback, context: MemoryContext)
         schedule = api_client.get_teacher_schedule(teacher['id'], period_info['mode'])
         
         if schedule:
-            formatted = format_schedule(schedule, teacher['name'])
-            
-            if len(formatted) > 4000:
-                parts = [formatted[i:i+4000] for i in range(0, len(formatted), 4000)]
-                for part in parts:
-                    await bot.send_message(chat_id=chat_id, text=part)
-            else:
-                await bot.send_message(chat_id=chat_id, text=formatted)
+            parts = format_schedule(schedule, teacher['name'])
+            for part in parts:
+                await bot.send_message(chat_id=chat_id, text=part)
             
             await context.set_state(ScheduleStates.showing_schedule)
             await bot.send_message(
@@ -647,14 +666,9 @@ async def handle_end_date(chat_id: int, text: str, context: MemoryContext):
                     )
                     
                     if schedule:
-                        formatted = format_schedule(schedule, teacher['name'])
-                        
-                        if len(formatted) > 4000:
-                            parts = [formatted[i:i+4000] for i in range(0, len(formatted), 4000)]
-                            for part in parts:
-                                await bot.send_message(chat_id=chat_id, text=part)
-                        else:
-                            await bot.send_message(chat_id=chat_id, text=formatted)
+                        parts = format_schedule(schedule, teacher['name'])
+                        for part in parts:
+                            await bot.send_message(chat_id=chat_id, text=part)
                         
                         await context.set_state(ScheduleStates.showing_schedule)
                         await bot.send_message(
