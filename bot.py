@@ -25,8 +25,6 @@ dp = Dispatcher()
 
 # ==================== КОНСТАНТЫ ====================
 
-STATS_FILE = 'user_data.json'
-
 PAIR_TIMES = {
     '1': '8:45-10:05', '2': '10:15-11:35', '3': '12:10-13:30', '4': '13:40-15:00',
     '5': '15:35-16:55', '6': '17:05-18:25', '7': '18:50-20:10', '8': '20:20-21:40'
@@ -40,10 +38,9 @@ INTERVAL_MODES = {
     '5': {'name': '📅 Произвольные даты', 'mode': 5}
 }
 
-# ==================== РАБОТА С ДАННЫМИ ====================
+# ==================== СОСТОЯНИЯ ====================
 
 class ScheduleStates(StatesGroup):
-    """Состояния бота"""
     searching = State()
     selecting_teacher = State()
     selecting_period = State()
@@ -51,68 +48,14 @@ class ScheduleStates(StatesGroup):
     awaiting_end_date = State()
     showing_schedule = State()
 
-def load_user_data():
-    """Загрузка статистики пользователей"""
-    if os.path.exists(STATS_FILE):
-        try:
-            with open(STATS_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                logger.info(f"ЗАГРУЖЕНО: {len(data)} пользователей")
-                return data
-        except Exception as e:
-            logger.error(f"Ошибка загрузки: {e}")
-    return {}
-
-def save_user_data(data):
-    """Сохранение статистики пользователей"""
-    try:
-        temp_file = STATS_FILE + '.tmp'
-        with open(temp_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        os.replace(temp_file, STATS_FILE)
-        logger.info(f"СОХРАНЕНО: {len(data)} пользователей")
-    except Exception as e:
-        logger.error(f"ОШИБКА сохранения: {e}")
-
-def record_user_search(chat_id, username, first_name, query):
-    """Запись поискового запроса"""
-    try:
-        user_data = load_user_data()
-        chat_id_str = str(chat_id)
-        
-        if chat_id_str not in user_data:
-            user_data[chat_id_str] = {
-                'username': username or 'unknown',
-                'first_name': first_name or 'user',
-                'created_at': datetime.now().isoformat(),
-                'search_requests': []
-            }
-        
-        search_request = {
-            'query': query,
-            'timestamp': datetime.now().isoformat()
-        }
-        user_data[chat_id_str]['search_requests'].append(search_request)
-        
-        if len(user_data[chat_id_str]['search_requests']) > 50:
-            user_data[chat_id_str]['search_requests'] = user_data[chat_id_str]['search_requests'][-50:]
-        
-        save_user_data(user_data)
-        logger.info(f"📊 Запрос '{query}' от пользователя {username}")
-    except Exception as e:
-        logger.error(f"ОШИБКА записи статистики: {e}")
-
 # ==================== API КЛИЕНТ РГГУ ====================
 
 class RGGUAPIClient:
-    """Клиент для работы с API расписания РГГУ"""
-    
     def __init__(self):
         self.base_url = 'https://raspis.rggu.ru'
         self.timeout = 10
 
     def get_teachers_list(self):
-        """Получение списка преподавателей"""
         try:
             response = requests.get(f'{self.base_url}/api/Get_Teachers_List', timeout=self.timeout)
             if response.status_code == 200:
@@ -124,7 +67,6 @@ class RGGUAPIClient:
             return []
 
     def search_teachers(self, query):
-        """Поиск преподавателей по фамилии"""
         if not query or len(query.strip()) < 2:
             return []
         
@@ -150,7 +92,6 @@ class RGGUAPIClient:
         return results[:20]
 
     def get_teacher_schedule(self, teacher_id, interval_mode=2, start_date=None, end_date=None):
-        """Получение расписания преподавателя"""
         try:
             payload = {
                 'teacher': int(teacher_id),
@@ -182,7 +123,6 @@ api_client = RGGUAPIClient()
 # ==================== СОЗДАНИЕ КЛАВИАТУР ====================
 
 def create_main_menu() -> Attachment:
-    """Создание главного меню"""
     buttons = [
         [
             CallbackButton(
@@ -193,11 +133,6 @@ def create_main_menu() -> Attachment:
         ],
         [
             CallbackButton(
-                text="📊 Статистика",
-                payload="cmd_stats",
-                intent=Intent.DEFAULT
-            ),
-            CallbackButton(
                 text="📋 Помощь",
                 payload="cmd_help",
                 intent=Intent.DEFAULT
@@ -207,7 +142,6 @@ def create_main_menu() -> Attachment:
     return Attachment(type="inline_keyboard", payload=ButtonsPayload(buttons=buttons))
 
 def create_teacher_list_buttons(teachers: list) -> Attachment:
-    """Создание кнопок со списком преподавателей"""
     buttons = []
     for i, teacher in enumerate(teachers):
         name = teacher['name']
@@ -231,7 +165,6 @@ def create_teacher_list_buttons(teachers: list) -> Attachment:
     return Attachment(type="inline_keyboard", payload=ButtonsPayload(buttons=buttons))
 
 def create_period_buttons() -> Attachment:
-    """Создание кнопок выбора периода"""
     buttons = []
     for key, value in INTERVAL_MODES.items():
         btn = CallbackButton(
@@ -252,7 +185,6 @@ def create_period_buttons() -> Attachment:
     return Attachment(type="inline_keyboard", payload=ButtonsPayload(buttons=buttons))
 
 def create_continue_menu() -> Attachment:
-    """Создание меню продолжения после показа расписания"""
     buttons = [
         [
             CallbackButton(
@@ -279,7 +211,6 @@ def create_continue_menu() -> Attachment:
 # ==================== ФОРМАТИРОВАНИЕ РАСПИСАНИЯ ====================
 
 def format_schedule(schedule, teacher_name) -> str:
-    """Форматирование расписания для отправки"""
     if not schedule or 'tblData' not in schedule:
         return "❌ Не удалось загрузить расписание"
     
@@ -334,7 +265,6 @@ def format_schedule(schedule, teacher_name) -> str:
     return result
 
 def is_valid_date(date_string):
-    """Проверка формата даты"""
     try:
         datetime.strptime(date_string, '%d.%m.%Y')
         return True
@@ -342,7 +272,6 @@ def is_valid_date(date_string):
         return False
 
 def is_valid_date_range(start_date, end_date):
-    """Проверка диапазона дат"""
     try:
         start = datetime.strptime(start_date, '%d.%m.%Y')
         end = datetime.strptime(end_date, '%d.%m.%Y')
@@ -350,11 +279,10 @@ def is_valid_date_range(start_date, end_date):
     except ValueError:
         return False
 
-# ==================== ОБРАБОТЧИКИ СООБЩЕНИЙ ====================
+# ==================== ОБРАБОТЧИКИ ====================
 
 @dp.bot_started()
 async def on_bot_started(event: BotStarted, context: MemoryContext):
-    """Приветствие при первом запуске"""
     chat_id = event.chat.chat_id
     try:
         await bot.send_message(
@@ -369,7 +297,6 @@ async def on_bot_started(event: BotStarted, context: MemoryContext):
 
 @dp.message_created(F.message.body.text == '/start')
 async def cmd_start(event: MessageCreated):
-    """Обработчик команды /start"""
     chat_id = event.message.recipient.chat_id
     try:
         await bot.send_message(
@@ -384,7 +311,6 @@ async def cmd_start(event: MessageCreated):
 
 @dp.message_created(F.message.body.text == '/help')
 async def cmd_help(event: MessageCreated):
-    """Обработчик команды /help"""
     chat_id = event.message.recipient.chat_id
     try:
         await bot.send_message(
@@ -406,7 +332,6 @@ async def cmd_help(event: MessageCreated):
 
 @dp.message_created(F.message.body.text == '/cancel')
 async def cmd_cancel(event: MessageCreated, context: MemoryContext):
-    """Обработчик команды /cancel"""
     chat_id = event.message.recipient.chat_id
     try:
         await context.clear()
@@ -422,7 +347,6 @@ async def cmd_cancel(event: MessageCreated, context: MemoryContext):
 
 @dp.message_callback(F.callback.payload == "cmd_search")
 async def callback_search(event: MessageCallback, context: MemoryContext):
-    """Обработка кнопки 'Найти преподавателя'"""
     chat_id = event.message.recipient.chat_id
     
     await event.answer(notification="🔍 Начинаем поиск...")
@@ -440,56 +364,8 @@ async def callback_search(event: MessageCallback, context: MemoryContext):
     except Exception as e:
         logger.error(f"Ошибка в callback_search: {e}")
 
-@dp.message_callback(F.callback.payload == "cmd_stats")
-async def callback_stats(event: MessageCallback):
-    """Обработка кнопки 'Статистика'"""
-    chat_id = event.message.recipient.chat_id
-    
-    await event.answer(notification="📊 Загружаю статистику...")
-    
-    try:
-        user_data = load_user_data()
-        
-        if not user_data:
-            await bot.send_message(
-                chat_id=chat_id,
-                text="📊 Статистика пока пуста.\n\n"
-                     "Начните искать расписание, и данные появятся здесь!",
-                attachments=[create_main_menu()]
-            )
-            return
-        
-        total_users = len(user_data)
-        total_searches = sum(len(u.get('search_requests', [])) for u in user_data.values())
-        
-        stats_text = f"📊 Статистика бота\n\n"
-        stats_text += f"👥 Всего пользователей: {total_users}\n"
-        stats_text += f"🔍 Всего поисков: {total_searches}\n\n"
-        
-        top_users = sorted(
-            user_data.items(),
-            key=lambda x: len(x[1].get('search_requests', [])),
-            reverse=True
-        )[:5]
-        
-        if top_users:
-            stats_text += "🏆 Топ 5 активных пользователей:\n"
-            for i, (chat_id_str, data) in enumerate(top_users, 1):
-                username = data.get('username', 'unknown')
-                searches = len(data.get('search_requests', []))
-                stats_text += f"{i}. @{username} — {searches} запросов\n"
-        
-        await bot.send_message(
-            chat_id=chat_id,
-            text=stats_text,
-            attachments=[create_main_menu()]
-        )
-    except Exception as e:
-        logger.error(f"Ошибка в callback_stats: {e}")
-
 @dp.message_callback(F.callback.payload == "cmd_help")
 async def callback_help(event: MessageCallback):
-    """Обработка кнопки 'Помощь'"""
     await event.answer(notification="📋 Справка")
     
     chat_id = event.message.recipient.chat_id
@@ -513,7 +389,6 @@ async def callback_help(event: MessageCallback):
 
 @dp.message_callback(F.callback.payload == "cmd_main")
 async def callback_main(event: MessageCallback, context: MemoryContext):
-    """Обработка кнопки 'Главное меню'"""
     await event.answer()
     
     chat_id = event.message.recipient.chat_id
@@ -529,7 +404,6 @@ async def callback_main(event: MessageCallback, context: MemoryContext):
 
 @dp.message_callback(F.callback.payload == "cmd_cancel")
 async def callback_cancel(event: MessageCallback, context: MemoryContext):
-    """Обработка кнопки 'Отмена'"""
     await event.answer(notification="✅ Отменено")
     
     chat_id = event.message.recipient.chat_id
@@ -545,7 +419,6 @@ async def callback_cancel(event: MessageCallback, context: MemoryContext):
 
 @dp.message_callback(F.callback.payload == "cmd_periods")
 async def callback_periods(event: MessageCallback, context: MemoryContext):
-    """Обработка кнопки 'Другой период'"""
     await event.answer()
     
     chat_id = event.message.recipient.chat_id
@@ -572,7 +445,6 @@ async def callback_periods(event: MessageCallback, context: MemoryContext):
 
 @dp.message_callback(F.callback.payload.startswith("teacher_"))
 async def callback_select_teacher(event: MessageCallback, context: MemoryContext):
-    """Обработка выбора преподавателя из списка"""
     chat_id = event.message.recipient.chat_id
     
     try:
@@ -601,7 +473,6 @@ async def callback_select_teacher(event: MessageCallback, context: MemoryContext
 
 @dp.message_callback(F.callback.payload.startswith("period_"))
 async def callback_select_period(event: MessageCallback, context: MemoryContext):
-    """Обработка выбора периода"""
     chat_id = event.message.recipient.chat_id
     period_key = event.callback.payload.split('_')[1]
     
@@ -676,7 +547,6 @@ async def callback_select_period(event: MessageCallback, context: MemoryContext)
 
 @dp.message_created()
 async def handle_message(event: MessageCreated, context: MemoryContext):
-    """Обработка текстовых сообщений"""
     chat_id = event.message.recipient.chat_id
     text = event.message.body.text
     
@@ -685,11 +555,9 @@ async def handle_message(event: MessageCreated, context: MemoryContext):
     
     try:
         current_state = await context.get_state()
-        username = event.message.sender.username or 'unknown'
-        first_name = event.message.sender.first_name or 'user'
         
         if current_state == ScheduleStates.searching:
-            await handle_teacher_search(chat_id, text, username, first_name, context)
+            await handle_teacher_search(chat_id, text, context)
             return
         
         if current_state == ScheduleStates.awaiting_start_date:
@@ -708,11 +576,8 @@ async def handle_message(event: MessageCreated, context: MemoryContext):
     except Exception as e:
         logger.error(f"Ошибка в handle_message: {e}")
 
-async def handle_teacher_search(chat_id: int, query: str, username: str, first_name: str, context: MemoryContext):
-    """Обработка поиска преподавателя"""
+async def handle_teacher_search(chat_id: int, query: str, context: MemoryContext):
     try:
-        record_user_search(chat_id, username, first_name, query)
-        
         await bot.send_message(
             chat_id=chat_id,
             text=f"🔍 Ищу: {query}..."
@@ -742,7 +607,6 @@ async def handle_teacher_search(chat_id: int, query: str, username: str, first_n
         logger.error(f"Ошибка в handle_teacher_search: {e}")
 
 async def handle_start_date(chat_id: int, text: str, context: MemoryContext):
-    """Обработка ввода начальной даты"""
     try:
         if is_valid_date(text):
             await context.update_data(start_date=text)
@@ -764,7 +628,6 @@ async def handle_start_date(chat_id: int, text: str, context: MemoryContext):
         logger.error(f"Ошибка в handle_start_date: {e}")
 
 async def handle_end_date(chat_id: int, text: str, context: MemoryContext):
-    """Обработка ввода конечной даты"""
     try:
         if is_valid_date(text):
             data = await context.get_data()
@@ -829,7 +692,7 @@ async def handle_end_date(chat_id: int, text: str, context: MemoryContext):
     except Exception as e:
         logger.error(f"Ошибка в handle_end_date: {e}")
 
-# ==================== ЗАПУСК БОТА ====================
+# ==================== ЗАПУСК ====================
 
 async def main():
     logger.info("🎓 Бот расписания РГГУ для MAX запущен!")
