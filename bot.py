@@ -278,7 +278,7 @@ def format_schedule(schedule, teacher_name) -> list:
         if remaining > 0:
             result += f"... и еще {remaining} дней\n\n"
     
-    # Разбиваем результат на части по 4000 символов
+    # Разбиваем результат на части по 3950 символов
     parts = []
     if len(result) > 3950:
         for i in range(0, len(result), 3950):
