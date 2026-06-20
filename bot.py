@@ -213,7 +213,7 @@ def create_continue_menu() -> Attachment:
 def format_schedule(schedule, teacher_name) -> list:
     """
     Форматирование расписания для отправки.
-    Возвращает список частей, каждая не больше 3950 символов.
+    Возвращает список частей, каждая не больше 3900 символов.
     """
     if not schedule or 'tblData' not in schedule:
         return ["❌ Не удалось загрузить расписание"]
@@ -221,13 +221,19 @@ def format_schedule(schedule, teacher_name) -> list:
     if not schedule['tblData']:
         return ["📭 Занятий нет в выбранный период"]
     
-    result = f"📅 {schedule.get('itemName', 'Расписание')}\n"
-    result += f"👤 {teacher_name}\n"
-    result += f"📆 {schedule.get('interval', '')}\n\n"
+    parts = []
+    current_part = f"📅 {schedule.get('itemName', 'Расписание')}\n"
+    current_part += f"👤 {teacher_name}\n"
+    current_part += f"📆 {schedule.get('interval', '')}\n\n"
     
     days_displayed = 0
+    total_days = len(schedule['tblData'])
+    
     for day in schedule['tblData']:
         if days_displayed >= 15:
+            remaining = total_days - days_displayed
+            if remaining > 0:
+                current_part += f"... и еще {remaining} дней\n\n"
             break
             
         day_text = f"📅 {day.get('date', '')}\n"
@@ -262,29 +268,28 @@ def format_schedule(schedule, teacher_name) -> list:
             
         day_text += "─" * 10 + "\n\n"
         
-        # Проверяем, не превысит ли добавление дня лимит
-        if len(result) + len(day_text) > 3400:  # Оставляем запас
-            # Сохраняем текущий результат как часть
-            # Добавляем завершающее сообщение о том, что будет продолжение
-            result += "... продолжение в следующем сообщении\n\n"
-            days_displayed += 1
-            break
+        # Проверяем, помещается ли день
+        if len(current_part) + len(day_text) > 3800:
+            # Текущая часть заполнена - сохраняем и начинаем новую
+            parts.append(current_part)
+            # Новая часть начинается с этого дня
+            current_part = f"📅 {schedule.get('itemName', 'Расписание')} (продолжение)\n"
+            current_part += f"👤 {teacher_name}\n"
+            current_part += f"📆 {schedule.get('interval', '')}\n\n"
+            # Добавляем текущий день в новую часть
+            current_part += day_text
+        else:
+            current_part += day_text
         
-        result += day_text
         days_displayed += 1
     
-    if days_displayed < len(schedule['tblData']):
-        remaining = len(schedule['tblData']) - days_displayed
-        if remaining > 0:
-            result += f"... и еще {remaining} дней\n\n"
+    # Добавляем последнюю часть, если она не пустая
+    if current_part:
+        parts.append(current_part)
     
-    # Разбиваем результат на части по 3500 символов
-    parts = []
-    if len(result) > 3500:
-        for i in range(0, len(result), 3500):
-            parts.append(result[i:i+3500])
-    else:
-        parts.append(result)
+    # Если частей нет (пустое расписание), возвращаем сообщение
+    if not parts:
+        return ["📭 Занятий нет в выбранный период"]
     
     return parts
 
